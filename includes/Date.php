@@ -16,7 +16,8 @@ if (!defined('InWeBid')) exit('Access denied');
 
 class Date
 {
-	private $timezone;
+	public $timezone;
+	public $UTCtimezone;
 	private $defaultformat;
 
 	public function __construct($system, $user)
@@ -27,6 +28,7 @@ class Date
 			$timezone = $user->user_data['timezone'];
 		}
 		$this->timezone = new DateTimeZone($timezone);
+		$this->UTCtimezone = new DateTimeZone('UTC');
 
 		if ($system->SETTINGS['datesformat'] == 'USA')
 		{
@@ -38,35 +40,67 @@ class Date
 		}
 	}
 
-	public function printDateTz($datetime)
+	// convert datetime from UTC to users timezone
+	public function printDateTz($datetime, $UTC_input = true)
 	{
-		$tmp = new DateTime($datetime, $this->timezone);
-		return $tmp->format('Y-m-d H:i');
-	}
-
-	public function convertToDatetime($rawdate, $format = false)
-	{
-		if (!$format)
+		if ($UTC_input)
 		{
-			$datetime = DateTime::createFromFormat($this->defaultformat, $rawdate);
+			$UTC_time = new DateTime($datetime, $this->UTCtimezone);
+			$UTC_time->setTimezone($this->timezone);
+			return $UTC_time->format('Y-m-d H:i');
 		}
 		else
 		{
-			$datetime = new DateTime(strtotime($rawdate));
+			$tmp = new DateTime($datetime, $this->timezone);
+			return $tmp->format('Y-m-d H:i');
+		}
+	}
+
+	public function currentDatetime($UTC = false)
+	{
+		if ($UTC)
+		{
+			$datetime = new DateTime('now', $this->UTCtimezone);
+		}
+		else
+		{
+			$datetime = new DateTime('now', $this->timezone);
 		}
 		return $datetime->format('Y-m-d H:i:s');
 	}
 
-	public function formatDate($rawdate, $format = false, $GMT = false)
+	// convert raw date string into datetime UTC timezone
+	public function convertToDatetime($raw_date, $format = false)
 	{
-		if ($GMT)
+		if (!$format)
 		{
-			$GMTtimezone = new DateTimeZone('GMT');
-			$datetime = new DateTime($rawdate, $GMTtimezone);
+			$datetime = DateTime::createFromFormat($this->defaultformat, $raw_date, $this->timezone);
 		}
 		else
 		{
-			$datetime = new DateTime($rawdate, $this->timezone);
+			$datetime = new DateTime(strtotime($raw_date), $this->timezone);
+		}
+		$datetime->setTimezone($this->UTCtimezone);
+		return $datetime->format('Y-m-d H:i:s');
+	}
+
+	public function convertToUTC($raw_date)
+	{
+		$UTC_time = new DateTime ($raw_date, $this->timezone);
+		$UTC_time->setTimezone($this->UTCtimezone);
+		return $UTC_time->format('Y-m-d H:i:s');
+	}
+
+	public function formatDate($raw_date, $format = false, $UTC_input = true)
+	{
+		if ($UTC)
+		{
+			$datetime = new DateTime ($raw_date, $this->UTCtimezone);
+			$datetime->setTimezone($this->timezone);
+		}
+		else
+		{
+			$datetime = new DateTime($raw_date, $this->timezone);
 		}
 		if (!$format)
 		{
@@ -76,5 +110,53 @@ class Date
 		{
 			return $datetime->format($format);
 		}
+	}
+
+	public function formatTimeLeft($diff)
+	{
+		global $MSG;
+
+		$timeleft = '';
+		if ($diff['y'] > 0)
+		{
+			$timeleft = $diff['y'] . $MSG['year_s'];
+		}
+		elseif ($diff['m'] > 0)
+		{
+			$timeleft = $diff['m'] . $MSG['month_s'];
+		}
+		elseif ($diff['d'] > 0)
+		{
+			$timeleft = $diff['d'] . $MSG['day_short'] . ' ';
+			if ($diff['h'] > 0)
+			{
+				$timeleft .= $diff['h'] . $MSG['hour_short'] . ' ';
+			}
+		}
+		else
+		{
+			if ($diff['h'] > 0)
+			{
+				$timeleft .= $diff['h'] . $MSG['hour_short'] . ' ';
+			}
+			if ($diff['m'] > 0)
+			{
+				$timeleft .= $diff['m'] . $MSG['minute_short'] . ' ';
+			}
+			elseif ($diff['h'] == 0 && $diff['m'] == 0 && $diff['s'] > 0)
+			{
+				$timeleft = '<1' . $MSG['minute_short'];
+			}
+			if ($diff['invert'])
+			{
+				$timeleft = $MSG['911'];
+			}
+		}
+		if ($diff['y'] == 0 && $diff['m'] == 0 && $diff['d'] == 0 && $diff['h'] == 0 && $diff['m'] < 15)
+		{
+			$timeleft = '<span style="color:#FF0000;">' . $timeleft . '</span>';
+		}
+
+		return $timeleft;
 	}
 }

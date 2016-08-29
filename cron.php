@@ -35,8 +35,6 @@ $categories = constructCategories();
  * c) send email to seller (reporting if there was a winner)
  */
 printLog('++++++ Closing expired auctions');
-$NOW = time();
-$NOWB = date('Ymd');
 $buyer_emails = array();
 $seller_emails = array();
 
@@ -60,16 +58,14 @@ while($row = $db->fetch())
 $query = "SELECT a.*, u.email, u.endemailmode, u.nick, u.payment_details, u.name
 		FROM " . $DBPrefix . "auctions a
 		LEFT JOIN " . $DBPrefix . "users u ON (a.user = u.id)
-		WHERE a.ends <= :time
+		WHERE a.ends <= CURRENT_TIMESTAMP
 		AND ((a.closed = 0)
 		OR (a.closed = 1
 		AND a.reserve_price > 0
 		AND a.num_bids > 0
 		AND a.current_bid < a.reserve_price
 		AND a.sold = 's'))";
-$params = array();
-$params[] = array(':time', $NOW, 'int');
-$db->query($query, $params);
+$db->direct_query($query);
 
 $count_auctions = $num = $db->numrows();
 printLog($num . ' auctions to close');
@@ -288,8 +284,7 @@ foreach ($auction_data as $Auction) // loop auctions
 	} // end auction ends
 	printLogL ('mail to seller: ' . $Seller['email'], 1);
 
-	$month = date('m', $Auction['ends'] + $system->tdiff);
-	$ends_string = $MSG['MON_0' . $month] . ' ' . date('d, Y H:i', $Auction['ends'] + $system->tdiff);
+	$ends_string = $dt->printDateTz($Auction['ends']);
 
 	$close_auction = true;
 	// deal with the automatic relists find which auctions are to be relisted
@@ -305,7 +300,9 @@ foreach ($auction_data as $Auction) // loop auctions
 		if ($_BIDSNUM == 0 || ($_BIDSNUM > 0 && $Auction['reserve_price'] > 0 && !$winner_present))
 		{
 			// Calculate end time
-			$_ENDS = $NOW + ($Auction['duration'] * 24 * 60 * 60);
+			$start_date = new DateTime('now', $dt->UTCtimezone);
+			$start_date->add(new DateInterval('P' . $Auction['duration'] . 'D'));
+			$auction_ends = $start_date->format('Y-m-d H:i:s');
 
 			$query = "DELETE FROM " . $DBPrefix . "bids WHERE auction = :auc_id";
 			$params = array();
@@ -315,11 +312,10 @@ foreach ($auction_data as $Auction) // loop auctions
 			$params = array();
 			$params[] = array(':auc_id', $Auction['id'], 'int');
 			$db->query($query, $params);
-			$query = "UPDATE " . $DBPrefix . "auctions SET starts = :time, ends = :ends,
+			$query = "UPDATE " . $DBPrefix . "auctions SET starts = CURRENT_TIMESTAMP, ends = :ends,
 					current_bid = 0, num_bids = 0, relisted = relisted + 1 WHERE id = :auc_id";
 			$params = array();
-			$params[] = array(':time', $NOW, 'int');
-			$params[] = array(':ends', $_ENDS, 'int');
+			$params[] = array(':ends', $auction_ends, 'str');
 			$params[] = array(':auc_id', $Auction['id'], 'int');
 			$db->query($query, $params);
 			$close_auction = false;
@@ -515,14 +511,14 @@ if ($system->SETTINGS['prune_unactivated_users'] == 1)
 	printLog("\n");
 	printLog("++++++ Prune unactivated user accounts");
 
-	$query = "SELECT COUNT(id) as COUNT FROM " . $DBPrefix . "users WHERE reg_date <= SUB_DATE(CURRENT_TIMESTAMP, INTERVAL " . $system->SETTINGS['prune_unactivated_users_days'] . " DAY) AND suspended = 8";
+	$query = "SELECT COUNT(id) as COUNT FROM " . $DBPrefix . "users WHERE reg_date <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL " . $system->SETTINGS['prune_unactivated_users_days'] . " DAY) AND suspended = 8";
 	$db->direct_query($query);
 
 	$pruneCount = $db->result('COUNT');
 	printLog($pruneCount . " accounts to prune");
 	if ($pruneCount > 0)
 	{
-		$query = "DELETE FROM " . $DBPrefix . "users WHERE reg_date <= SUB_DATE(CURRENT_TIMESTAMP, INTERVAL " . $system->SETTINGS['prune_unactivated_users_days'] . " DAY) AND suspended = 8";
+		$query = "DELETE FROM " . $DBPrefix . "users WHERE reg_date <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL " . $system->SETTINGS['prune_unactivated_users_days'] . " DAY) AND suspended = 8";
 		$db->direct_query($query);
 
 		$query = "UPDATE " . $DBPrefix . "counters SET inactiveusers = inactiveusers - " . $pruneCount;
@@ -534,13 +530,8 @@ if ($system->SETTINGS['prune_unactivated_users'] == 1)
 printLog("\n");
 printLog("++++++ Archiving old auctions");
 
-$expireAuction = 60 * 60 * 24 * $system->SETTINGS['archiveafter']; // time of auction expiration (in seconds)
-$expiredTime = time() - $expireAuction;
-
-$query = "SELECT id FROM " . $DBPrefix . "auctions WHERE ends <= :expiredTime";
-$params = array();
-$params[] = array(':expiredTime', $expiredTime, 'int');
-$db->query($query, $params);
+$query = "SELECT id FROM " . $DBPrefix . "auctions WHERE ends <= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL " . $system->SETTINGS['archiveafter'] . " DAY)";
+$db->direct_query($query);
 
 $num = $db->numrows();
 printLog($num . " auctions to archive");
