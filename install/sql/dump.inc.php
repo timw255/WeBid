@@ -588,7 +588,7 @@ $query[] = "CREATE TABLE `" . $DBPrefix . "community` (
   `id` int(11) NOT NULL auto_increment,
   `name` varchar(255) NOT NULL default '0',
   `messages` int(11) NOT NULL default '0',
-  `lastmessage` `lastmessage` datetime default CURRENT_TIMESTAMP,
+  `lastmessage` datetime default CURRENT_TIMESTAMP,
   `msgstoshow` int(11) NOT NULL default '0',
   `active` tinyint(1) NOT NULL default '1',
   PRIMARY KEY  (`id`)
@@ -1839,8 +1839,8 @@ $query[] = "CREATE TABLE `" . $DBPrefix . "usersips` (
   `id` int(11) NOT NULL auto_increment,
   `user` int(11) default NULL,
   `ip` varchar(15) default NULL,
-  `type` enum('first','after') NOT NULL default 'first',
-  `action` enum('accept','deny') NOT NULL default 'accept',
+  `type` varchar(255) default 'register',
+  `action` enum('accept', 'deny') NOT NULL default 'accept',
   PRIMARY KEY  (`id`)
 ) ;";
 
